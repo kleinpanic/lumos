@@ -1,4 +1,3 @@
-```markdown
 # Lumos
 
 **Lumos** is a command‑line utility to query and set the brightness of both internal backlight panels and external monitors supporting DDC/CI. It offers machine‑readable and human‑readable outputs, step adjustments, direct percentage or raw value setting, on‑screen popups, and persistent device selection.
@@ -121,4 +120,3 @@ Lumos stores your chosen internal backlight interface in:
 ## License
 
 This project is released under the **MIT License**. See [LICENSE](LICENSE) for details.  
-```
