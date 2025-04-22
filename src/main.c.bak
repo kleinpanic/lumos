@@ -1,0 +1,227 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <getopt.h>
+#include <limits.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <libgen.h>
+#include <unistd.h>
+
+#include "brightness.h"
+
+#define CONFIG_DIR  "brightness"
+#define CONFIG_FILE "config"
+
+/* Build path to config file */
+static char *get_config_path(void) {
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+    char *path = malloc(PATH_MAX);
+    if (!path) { perror("malloc"); exit(EXIT_FAILURE); }
+    if (xdg && *xdg) {
+        snprintf(path, PATH_MAX, "%s/%s/%s", xdg, CONFIG_DIR, CONFIG_FILE);
+    } else {
+        const char *home = getenv("HOME");
+        snprintf(path, PATH_MAX, "%s/.config/%s/%s", home, CONFIG_DIR, CONFIG_FILE);
+    }
+    return path;
+}
+
+/* Load saved interface or return NULL */
+static char *load_saved_interface(void) {
+    char *cfg = get_config_path();
+    FILE *f = fopen(cfg, "r");
+    if (!f) { free(cfg); return NULL; }
+    char buf[256];
+    if (!fgets(buf, sizeof(buf), f)) {
+        fclose(f); free(cfg); return NULL;
+    }
+    fclose(f); free(cfg);
+    buf[strcspn(buf, "\n")] = '\0';
+    return strdup(buf);
+}
+
+/* Save chosen interface */
+static int save_interface(const char *iface) {
+    char *cfg = get_config_path();
+    char *cp = strdup(cfg);
+    char *dir = dirname(cp);
+    if (mkdir(dir, 0755) && errno != EEXIST) {
+        perror("mkdir config dir"); free(cp); free(cfg); return -1;
+    }
+    free(cp);
+
+    FILE *f = fopen(cfg, "w");
+    if (!f) { perror("fopen config"); free(cfg); return -1; }
+    fprintf(f, "%s\n", iface);
+    fclose(f); free(cfg);
+    return 0;
+}
+
+static void print_usage(const char *prog) {
+    fprintf(stderr,
+      "Usage: %s [options]\n"
+      "  -m, --machine-readable       print raw brightness value\n"
+      "  -r, --human-readable         print percent brightness\n"
+      "  -a, --adjust <up|down>       step adjust by 10%%\n"
+      "  -s, --set <value>            set brightness (percent)\n"
+      "  -R, --raw                    treat -s value as raw backlight number\n"
+      "  -n, --nodisplay              do not show X11 popup\n"
+      "  -d, --device <interface>     choose internal backlight interface\n"
+      "  -P, --persist-device         save chosen internal interface\n"
+      "  -x, --external <connector>   DDC/CI external monitor (by connector name)\n"
+      "  --profile-new <name>         create a new profile (skeleton)\n"
+      "  --profile-load <name>        load named profile (skeleton)\n"
+      "  -h, --help                   this help\n",
+      prog);
+}
+
+int main(int argc, char *argv[]) {
+    int opt_m=0, opt_r=0, opt_n=0, opt_R=0, opt_P=0;
+    char *opt_adj=NULL, *opt_dev=NULL, *opt_ext=NULL;
+    int opt_s=-1;
+    char *opt_pnew=NULL, *opt_pload=NULL;
+
+    static struct option longopts[] = {
+        {"machine-readable", no_argument,       0,'m'},
+        {"human-readable",   no_argument,       0,'r'},
+        {"adjust",           required_argument, 0,'a'},
+        {"set",              required_argument, 0,'s'},
+        {"raw",              no_argument,       0,'R'},
+        {"nodisplay",        no_argument,       0,'n'},
+        {"device",           required_argument, 0,'d'},
+        {"persist-device",   no_argument,       0,'P'},
+        {"external",         required_argument, 0,'x'},
+        {"profile-new",      required_argument, 0,  1 },
+        {"profile-load",     required_argument, 0,  2 },
+        {"help",             no_argument,       0,'h'},
+        {0,0,0,0}
+    };
+
+    int c;
+    while ((c = getopt_long(argc, argv, "mra:s:Rnd:Px:h", longopts, NULL)) != -1) {
+        switch (c) {
+          case 'm': opt_m    = 1;              break;
+          case 'r': opt_r    = 1;              break;
+          case 'a': opt_adj  = optarg;         break;
+          case 's': opt_s    = atoi(optarg);   break;
+          case 'R': opt_R    = 1;              break;
+          case 'n': opt_n    = 1;              break;
+          case 'd': opt_dev  = strdup(optarg); break;
+          case 'P': opt_P    = 1;              break;
+          case 'x': opt_ext  = strdup(optarg); break;
+          case 1:   opt_pnew = optarg;         break;
+          case 2:   opt_pload= optarg;         break;
+          case 'h':
+          default:
+            print_usage(argv[0]);
+            return (c=='h') ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+    }
+
+    /* Profiles */
+    if (opt_pnew)  return profile_new(opt_pnew);
+    if (opt_pload) return profile_load(opt_pload);
+
+    /* Internal backlight init/persist */
+    char *saved = load_saved_interface();
+    char *device = opt_dev ? opt_dev : saved;
+    init_backlight_paths(device);
+    if (opt_P && device && (!saved || strcmp(device, saved))) {
+        save_interface(device);
+    }
+    free(saved);
+
+    /* --- EXTERNAL MONITOR FLOW --- */
+    if (opt_ext) {
+        char *i2c = resolve_ddc_connector(opt_ext);
+        if (!i2c) {
+            fprintf(stderr, "No DDC connector matching '%s'\n", opt_ext);
+            return EXIT_FAILURE;
+        }
+
+        /* machine-readable raw */
+        if (opt_m) {
+            int cur, mx;
+            if (read_ddc_brightness(i2c, &cur, &mx) < 0) {
+                free(i2c);
+                return EXIT_FAILURE;
+            }
+            printf("%d\n", cur);
+            free(i2c);
+            return EXIT_SUCCESS;
+        }
+
+        /* human-readable percent */
+        if (opt_r) {
+            int cur, mx;
+            if (read_ddc_brightness(i2c, &cur, &mx) < 0) {
+                free(i2c);
+                return EXIT_FAILURE;
+            }
+            printf("%d%%\n", (cur * 100) / mx);
+            free(i2c);
+            return EXIT_SUCCESS;
+        }
+
+        /* adjust up/down */
+        if (opt_adj) {
+            int r = adjust_ddc_brightness(i2c, opt_adj);
+            free(i2c);
+            return r ? EXIT_FAILURE : EXIT_SUCCESS;
+        }
+
+        /* set value */
+        if (opt_s != -1) {
+            int val = opt_R
+                    ? opt_s
+                    : (opt_s < 0 ? 0 : opt_s > 100 ? 100 : opt_s);
+            if ((opt_s < 0) || (!opt_R && opt_s > 100))
+                fprintf(stderr, "Warning: -s clamped to %d%% for external\n", val);
+            int r = set_ddc_brightness(i2c, val);
+            if (!r) printf("External brightness set to %d%% on %s\n", val, opt_ext);
+            free(i2c);
+            return r ? EXIT_FAILURE : EXIT_SUCCESS;
+        }
+
+        /* no external action given */
+        print_usage(argv[0]);
+        free(i2c);
+        return EXIT_FAILURE;
+    }
+
+    /* --- INTERNAL BACKLIGHT FLOW --- */
+    if (opt_m) {
+        printf("%d\n", get_current_brightness());
+        return EXIT_SUCCESS;
+    }
+    if (opt_r) {
+        int cur = get_current_brightness();
+        int mx  = get_max_brightness();
+        printf("%d%%\n", (cur * 100) / mx);
+        return EXIT_SUCCESS;
+    }
+    if (opt_adj) {
+        adjust_brightness(opt_adj, opt_n);
+        return EXIT_SUCCESS;
+    }
+    if (opt_s != -1) {
+        int mx = get_max_brightness();
+        int raw = opt_R
+                ? opt_s
+                : (opt_s < 0 ? 0 : opt_s > 100 ? mx : (opt_s * mx) / 100);
+        if (!opt_R && (opt_s < 0 || opt_s > 100))
+            fprintf(stderr,"Warning: -s clamped to %d%% internally\n",
+                    opt_s<0?0:100);
+        write_brightness(raw);
+        if (!opt_n) display_brightness(raw);
+        return EXIT_SUCCESS;
+    }
+
+    /* nothing — show help */
+    print_usage(argv[0]);
+    return EXIT_FAILURE;
+}
+

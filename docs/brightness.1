@@ -1,0 +1,110 @@
+.\" Manpage for brightness(1)
+.TH BRIGHTNESS 1 "April 2025" "1.0" "Brightness Control"
+.SH NAME
+brightness \- control internal and external display backlight brightness
+.SH SYNOPSIS
+.B brightness
+[\fB-m\fR|\fB--machine-readable\fR] \
+[\fB-r\fR|\fB--human-readable\fR] \
+[\fB-a up|down\fR|\fB--adjust up|down\fR] \
+[\fB-s VALUE\fR|\fB--set VALUE\fR] \
+[\fB-R\fR|\fB--raw\fR] \
+[\fB-n\fR|\fB--nodisplay\fR] \
+[\fB-d IFACE\fR|\fB--device IFACE\fR] \
+[\fB-P\fR|\fB--persist-device\fR] \
+[\fB-x CONNECTOR\fR|\fB--external CONNECTOR\fR] \
+[\fB--profile-new NAME\fR] \
+[\fB--profile-load NAME\fR] \
+[\fB-h\fR|\fB--help\fR]
+.SH DESCRIPTION
+.B brightness
+is a command-line utility to query and set the brightness of internal backlight interfaces (e.g. laptop panels via \fI/sys/class/backlight\fR) and external monitors supporting DDC/CI via \fI/dev/i2c-*\/drm_dp_aux*\fR.  It can display raw and percentage values, step-adjust up or down, save a chosen interface, and stub in profiles.
+.PP
+By default, without options, it prints usage help.
+.SH OPTIONS
+.TP
+\fB-m\fR, \fB--machine-readable\fR
+Print the raw brightness value (integer).
+.TP
+\fB-r\fR, \fB--human-readable\fR
+Print both raw and percentage:  
+Internal: “Internal backlight: raw=XXX, max=YYY, percent=ZZZ%”  
+External: “External 'NAME': raw=XXX, max=YYY, percent=ZZZ%”
+.TP
+\fB-a up|down\fR, \fB--adjust up|down\fR
+Step adjust brightness by 10% of maximum (internal or via DDC/CI).
+.TP
+\fB-s VALUE\fR, \fB--set VALUE\fR
+Set brightness.  By default, VALUE is percent (0–100).  With \fB-R\fR, VALUE is the raw backlight value.
+.TP
+\fB-R\fR, \fB--raw\fR
+Treat \fB-s VALUE\fR as a raw backlight number, not percentage.
+.TP
+\fB-n\fR, \fB--nodisplay\fR
+Suppress the X11 on-screen popup when changing internal brightness.
+.TP
+\fB-d IFACE\fR, \fB--device IFACE\fR
+Select a specific internal backlight interface under \fI/sys/class/backlight/IFACE\fR.
+.TP
+\fB-P\fR, \fB--persist-device\fR
+Save the chosen internal interface to \~/.config/brightness/config so it’s used as default.
+.TP
+\fB-x CONNECTOR\fR, \fB--external CONNECTOR\fR
+Target an external monitor by connector name (e.g. “HDMI-1” or “eDP-1”).  Uses DDC/CI over i2c-dev or drm_dp_aux nodes.
+.TP
+\fB--profile-new NAME\fR
+Stub: create a new profile named NAME (interactive TUI not yet implemented).
+.TP
+\fB--profile-load NAME\fR
+Stub: load and apply a saved profile.
+.TP
+\fB-h\fR, \fB--help\fR
+Display this help message and exit successfully.
+.SH EXIT STATUS
+.B brightness
+exits with
+.PP
+.TP
+0  
+on success, or  
+.TP
+>0  
+if an error occurred (e.g., invalid option, cannot access backlight or DDC device).
+.SH FILES
+.TP
+\fI~/.config/brightness/config\fR
+Stores the last persisted internal interface.
+.TP
+\fI/sys/class/backlight/*/brightness\fR
+Internal backlight control.
+.TP
+\fI/sys/class/backlight/*/max_brightness\fR
+Internal maximum value.
+.SH EXAMPLES
+.TP
+Query the raw internal brightness:
+.IP
+\% brightness -m
+.TP
+Show nice internal status:
+.IP
+\% brightness -r
+.TP
+Step external HDMI monitor down:
+.IP
+\% brightness -x HDMI-1 -a down
+.TP
+Set external monitor to 40%:
+.IP
+\% brightness -x HDMI-1 -s 40
+.TP
+Save your preferred internal backlight (e.g. “intel_backlight”):
+.IP
+\% brightness -d intel_backlight -P
+.SH BUGS
+Profiles are not yet implemented; DDC/CI support may vary by kernel and driver.
+.SH AUTHOR
+Written by kleinpanic.
+.SH LICENSE
+MIT License.
+
