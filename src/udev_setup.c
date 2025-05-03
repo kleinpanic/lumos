@@ -104,13 +104,17 @@ static int write_rules_file(const char *rule_path, int include_leds) {
 
     /* backlight rule */
     fprintf(f,
-        "SUBSYSTEM==\"backlight\", ACTION==\"add\", GROUP=\"video\", MODE=\"0664\"\n"
+        "SUBSYSTEM==\"backlight\", ACTION==\"add\", "
+        "RUN+=\"/bin/sh -c 'chmod 0664 /sys/class/backlight/%%k/brightness && "
+        "chown :video /sys/class/backlight/%%k/brightness'\"\n"
     );
 
     /* optional LEDs */
     if (include_leds) {
         fprintf(f,
-            "SUBSYSTEM==\"leds\",      ACTION==\"add\", GROUP=\"video\", MODE=\"0664\"\n"
+            "SUBSYSTEM==\"leds\", ACTION==\"add\", "
+            "RUN+=\"/bin/sh -c 'chmod 0664 /sys/class/leds/%%k/brightness && "
+            "chown :video /sys/class/leds/%%k/brightness'\"\n"
         );
     }
 
