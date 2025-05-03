@@ -234,11 +234,11 @@ void display_brightness(int brightness) {
             BlackPixel(d, screen),
             WhitePixel(d, screen));
     XSetWindowBackground(d, w, 0xD3D3D3); // Light gray
-    XStoreName(d, w, "BrightnessControl");
+    XStoreName(d, w, "lumos");
     XClassHint *classHint = XAllocClassHint();
     if (classHint) {
-        classHint->res_name  = "brightnesscontrol";
-        classHint->res_class = "BrightnessControl";
+        classHint->res_name  = "lumos";
+        classHint->res_class = "lumos";
         XSetClassHint(d, w, classHint);
         XFree(classHint);
     }
