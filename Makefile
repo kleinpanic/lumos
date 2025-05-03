@@ -7,7 +7,7 @@ CC       ?= gcc
 CFLAGS   ?= -std=c11 -Wall -Wextra -Iinclude $(shell pkg-config --cflags x11)
 LDFLAGS  ?= $(shell pkg-config --libs x11) -lm -li2c
 
-SRC      := src/main.c src/brightness.c
+SRC      := src/main.c src/brightness.c src/udev_setup.c
 TARGET   := lumos
 MANPAGE  := $(wildcard docs/*.1)
 
@@ -24,8 +24,8 @@ clean:
 install: all
 	install -d $(DESTDIR)$(BINDIR)
 	install -m 755 $(TARGET) $(DESTDIR)$(BINDIR)/
-	install -d $(DESTDIR)$(INCLUDEDIR)
-	install -m 644 include/brightness.h $(DESTDIR)$(INCLUDEDIR)/
+	#install -d $(DESTDIR)$(INCLUDEDIR)
+	#install -m 644 include/brightness.h include/udev_setup.h $(DESTDIR)$(INCLUDEDIR)/
 ifneq ($(MANPAGE),)
 	install -d $(DESTDIR)$(MANPREFIX)/man1
 	install -m 644 $(MANPAGE) $(DESTDIR)$(MANPREFIX)/man1/$(notdir $(MANPAGE))

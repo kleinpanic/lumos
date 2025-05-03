@@ -14,6 +14,7 @@
 - **On‑screen popup** via X11 (suppressed with `-n`)
 - **Persist default backlight interface** (`-P`)
 - **Profiles & presets** skeleton support (`--profile-new`, `--profile-load`)
+- **Udev rule installation** (`-U, --setup`) to allow non-root use
 
 ---
 
@@ -49,7 +50,9 @@ sudo make install
 This will install:
 
 - BINARY → `/usr/local/bin/lumos`
-- HEADER  → `/usr/local/include/brightness.h`
+- HEADER  → `/usr/local/include/brightness.h /usr/local/include/udev_setup.h`
+    - This is a comment in the makefile. It no longer does this.
+    - This is for future API support through other programs. 
 - MANPAGE → `/usr/local/share/man/man1/lumos.1`
 
 ---

@@ -11,8 +11,9 @@
 #include <unistd.h>
 
 #include "brightness.h"
+#include "udev_setup.h"
 
-#define CONFIG_DIR  "brightness"
+#define CONFIG_DIR  "lumos"
 #define CONFIG_FILE "config"
 
 /* Build path to config file */
@@ -60,6 +61,7 @@ static int save_interface(const char *iface) {
 static void print_usage(const char *prog) {
     fprintf(stderr,
       "Usage: %s [options]\n"
+      "  -U, --setup                  configure udev rules for lumos"
       "  -m, --machine-readable       print raw brightness value\n"
       "  -r, --human-readable         print brightness with raw and percent\n"
       "  -a, --adjust <up|down>       step adjust by 10%%\n"
@@ -77,11 +79,13 @@ static void print_usage(const char *prog) {
 
 int main(int argc, char *argv[]) {
     int opt_m=0, opt_r=0, opt_n=0, opt_R=0, opt_P=0;
+    int opt_setup = 0;
     char *opt_adj=NULL, *opt_dev=NULL, *opt_ext=NULL;
     int opt_s=-1;
     char *opt_pnew=NULL, *opt_pload=NULL;
 
     static struct option longopts[] = {
+        {"setup",            no_argument,       0,'U'},
         {"machine-readable", no_argument,       0,'m'},
         {"human-readable",   no_argument,       0,'r'},
         {"adjust",           required_argument, 0,'a'},
@@ -98,8 +102,9 @@ int main(int argc, char *argv[]) {
     };
 
     int c;
-    while ((c = getopt_long(argc, argv, "mra:s:Rnd:Px:h", longopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "mra:s:Rnd:Px:hU", longopts, NULL)) != -1) {
         switch (c) {
+          case 'U': opt_setup = 1;             break;
           case 'm': opt_m    = 1;              break;
           case 'r': opt_r    = 1;              break;
           case 'a': opt_adj  = optarg;         break;
@@ -116,6 +121,11 @@ int main(int argc, char *argv[]) {
             print_usage(argv[0]);
             return (c=='h') ? EXIT_SUCCESS : EXIT_FAILURE;
         }
+    }
+
+    /* Setup flag */
+    if (opt_setup) {
+        run_udev_setup();
     }
 
     /* Profiles */
