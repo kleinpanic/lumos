@@ -13,6 +13,8 @@
 #include <dirent.h>
 #include <limits.h>
 #include <sys/utsname.h>
+#include <grp.h>
+#include <sys/types.h>
 
 /* Paths we check/create */
 #define UDEV_RULE_ETC   "/etc/udev/rules.d/90-lumos.rules"
@@ -131,7 +133,7 @@ void run_udev_setup(void) {
         exit(EXIT_FAILURE);
     }
 
-    /* If a rule already exists, bail out */
+    /* Bail if someone’s already dropped a rule in /etc or /lib */
     if (file_exists(UDEV_RULE_ETC) || file_exists(UDEV_RULE_LIB)) {
         const char *existing = file_exists(UDEV_RULE_ETC)
                              ? UDEV_RULE_ETC : UDEV_RULE_LIB;
@@ -139,32 +141,79 @@ void run_udev_setup(void) {
         exit(EXIT_SUCCESS);
     }
 
-    /* Discover interfaces for summary */
+    /* Discover & keep track for summary */
     int nb = 0, nl = 0;
     char **backs = list_sysfs_entries(BACKLIGHT_BASE_PATH, &nb);
-    char **leds = NULL;
+    char **leds  = NULL;
     if (access("/sys/class/leds", R_OK|X_OK) == 0) {
         leds = list_sysfs_entries("/sys/class/leds", &nl);
     }
 
-    /* Write out lumos rule */
+    /* 1) Write out the rule file */
     if (write_rules_file(UDEV_RULE_ETC, nl > 0) != 0) {
         fprintf(stderr, "Failed to write udev rule; aborted.\n");
         exit(EXIT_FAILURE);
     }
 
-    /* Attempt to reload rules immediately */
+    /* 2) Reload all rules */
     printf("Reloading udev rules... ");
     if (reload_udev_rules() == 0) {
         printf("done.\n");
     } else {
         fprintf(stderr,
-            "Failed: could not reload udev rules automatically.\n"
-            "You may need to manyally run:\n"
-            "  sudo udevadm control --reload-rules && udevadm trigger\n");
+            "Failed to reload udev rules automatically.\n"
+            "You may need:\n"
+            "  sudo udevadm control --reload-rules && sudo udevadm trigger\n");
     }
 
-    /* Summarize for the user */
+    /* 3) Retrigger only backlight & leds so new rules apply */
+    system("udevadm trigger --subsystem-match=backlight --action=add");
+    system("udevadm trigger --subsystem-match=leds      --action=add");
+
+    /* 4) One-time pass to fix existing files */
+    struct group *g = getgrnam("video");
+    gid_t        vid = g ? g->gr_gid : (gid_t)-1;
+    int          fixed = 0;
+    char         path[PATH_MAX];
+    struct dirent *ent;
+    DIR *d;
+
+    /* Backlight */
+    d = opendir(BACKLIGHT_BASE_PATH);
+    if (d) {
+        while ((ent = readdir(d)) != NULL) {
+            if (ent->d_name[0] == '.') continue;
+            snprintf(path, sizeof(path),
+                     "%s/%s/brightness",
+                     BACKLIGHT_BASE_PATH,
+                     ent->d_name);
+            if (chmod(path, 0664) == 0) {
+                if (vid != (gid_t)-1)
+                    chown(path, -1, vid);
+                fixed++;
+            }
+        }
+        closedir(d);
+    }
+
+    /* LEDs */
+    d = opendir("/sys/class/leds");
+    if (d) {
+        while ((ent = readdir(d)) != NULL) {
+            if (ent->d_name[0] == '.') continue;
+            snprintf(path, sizeof(path),
+                     "/sys/class/leds/%s/brightness",
+                     ent->d_name);
+            if (chmod(path, 0664) == 0) {
+                if (vid != (gid_t)-1)
+                    chown(path, -1, vid);
+                fixed++;
+            }
+        }
+        closedir(d);
+    }
+
+    /* 5) Final summary */
     char *osname = get_os_pretty_name();
     printf("\n=== lumos --setup Summary ===\n");
     printf(" OS: %s\n", osname);
@@ -176,7 +225,6 @@ void run_udev_setup(void) {
         free(backs[i]);
     }
     printf("\n");
-    free(backs);
 
     if (nl > 0) {
         printf(" LED interfaces (%d):", nl);
@@ -185,12 +233,12 @@ void run_udev_setup(void) {
             free(leds[i]);
         }
         printf("\n");
-        free(leds);
     }
 
     printf(" Udev rule installed at: %s\n", UDEV_RULE_ETC);
-    printf(" You can inspect/edit that file as needed.\n");
+    printf(" Existing brightness files fixed: %d\n", fixed);
+    printf(" You can inspect or tweak the rule file as needed.\n");
     printf("Done.\n");
+
     exit(EXIT_SUCCESS);
 }
-
